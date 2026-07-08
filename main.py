@@ -123,6 +123,8 @@ async def admin_commands(client, message):
                 "• `.effect [متن]` ➡️ افکت متحرک سه مرحله‌ای مشتی واسه متنت\n\n"
                 "👥 **دستورات گروهی:**\n"
                 "• `all [متن]` ➡️ تگ همگانی نامرئی\n\n"
+                "👥 **دستورات گروهی:**\n"
+                "• `all [متن]` ➡️ تگ همگانی نامرئی\n\n"
                 "🎨 **ابزار استیکر (با ریپلای روی پیام):**\n"
                 "• `sticker` ➡️ تبدیل عکس به استیکر مشتی\n"
                 "• `pic` ➡️ بیرون کشیدن عکس باکیفیت از دل استیکر\n\n"
@@ -600,6 +602,11 @@ async def catch_view_once(client, message):
             diff_msg = await message.reply_text("🤖 **یکی رو انتخاب کن واسه بازی مشتی دوز:**\n\nبنویس واسم:\n🔹 `راحت`\n🔹 `معمولی`\n🔹 `هارد`\n🔹 `فوق سخت`")
             games[chat_id] = {"board": [], "difficulty": None, "bot_msg_id": None, "user_dooz_msg_id": message.id, "diff_msg_id": diff_msg.id}
             return
+
+        # ⚡️ فیلتر هوشمند منشی: فقط و فقط اگر پیام حاوی «سلام» یا کلمات هم‌خانواده انگلیسی باشد جواب بدهد
+        is_greeting = any(greet in text_lower for greet in ["سلام", "درود", "خوبی", "hi", "hello", "yo", "slm"])
+        if not is_greeting:
+            return  # اگر سلام نکرده بود، کاملاً بیخیال شو و منشی جواب ندهد
 
         # سیستم منشی با آنتی‌اسپم
         now = time.time()
