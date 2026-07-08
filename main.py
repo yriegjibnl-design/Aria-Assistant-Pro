@@ -628,7 +628,8 @@ async def catch_view_once(client, message):
         if not is_group:
             try:
                 await client.send_chat_action(chat_id, ChatAction.RECORD_AUDIO)
-                voice_file = f"voice_{chat_id}.ogg"
+                voice_file = f"voice_{chat_id}.mp3"
+                if os.path.exists(voice_file): os.remove(voice_file)
                 tts = gTTS(text=reply_text, lang='fa', slow=False)
                 tts.save(voice_file)
                 await client.send_voice(chat_id, voice=voice_file, caption="🎙 منشی صوتی آریا (مود شب)")
@@ -664,7 +665,7 @@ async def catch_view_once(client, message):
             )
         else:
             reply_text = (
-                f"سلام سلااام! چطوری رفیق？ مخلصیم. 😍\n"
+                f"سلام سلااام! چطوری رفیق؟ مخلصیم. 😍\n"
                 f"من دستیار آریام؛ آریا الان آنلاین نیست و در وضعیت [ **{current_status}** ] قرار داره. پیامت رو گرفتم و جاش کاملاً امنه. وقتی بیاد اولین کاری که میکنه اینه که میاد پی‌ویت. خیالت تختِ تخت! ✌️\n\n"
                 f"⚠️ **توجه:** در صورت تمایل به صبوری و سرگرمی، می‌توانید با ارسال کلمه **«دوز»**، به بازی دوز مشغول شوید تا آریا آنلاین شود."
             )
@@ -673,11 +674,12 @@ async def catch_view_once(client, message):
     await asyncio.sleep(3)
     await message.reply_text(reply_text)
     
-    # 🎤 قابلیت جدید: منشی صوتی با gTTS (مخصوص چت خصوصی)
+    # 🎤 قابلیت اصلی: منشی صوتی با gTTS (مخصوص چت خصوصی)
     if not is_group:
         try:
             await client.send_chat_action(chat_id, ChatAction.RECORD_AUDIO)
-            voice_file = f"voice_{chat_id}.ogg"
+            voice_file = f"voice_{chat_id}.mp3"
+            if os.path.exists(voice_file): os.remove(voice_file)
             
             # تبدیل متن ریپلای شده به فایل صوتی
             tts = gTTS(text=reply_text, lang=lang_code, slow=False)
