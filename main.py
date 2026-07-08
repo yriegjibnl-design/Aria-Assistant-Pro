@@ -47,12 +47,13 @@ async def download_file(url, destination):
     return False
 
 # --- بخش اول: دستورات ادمین (فقط خودت می‌توانی اجرا کنی) ---
-@app.on_message(filters.me)
-def admin_commands(client, message):
+@app.on_message(filters.me & filters.text)
+async def admin_commands(client, message):
     text = message.text.strip() if message.text else ""
     text_lower = text.lower()
     chat_id = message.chat.id
-    is_saved_messages = message.chat.type.value == "private" and message.chat.id == client.get_me().id
+    me = await client.get_me()
+    is_saved_messages = message.chat.type.value == "private" and message.chat.id == me.id
 
     # 🔹 قابلیت راهنمای کامل دستورات (فقط در بخش Saved Messages کار می‌کند)
     if is_saved_messages and text_lower == "help":
@@ -91,41 +92,40 @@ def admin_commands(client, message):
             "🎮 **بازی دوز:**\n"
             "• بفرست `دوز` یا `dooz` تو پی‌وی هر کی؛ ربات ردیف میشه واسه بازی!"
         )
-        message.reply_text(help_text)
+        await message.reply_text(help_text)
         return
 
     # 🔹 قابلیت جدید: دانلودر و لیچر مافوق صوت با aiohttp (.dl)
     if text.startswith(".dl "):
         url = text.split(".dl ", 1)[1].strip()
-        status_msg = message.edit_text("📥 در حال خفت کردن فایل از اینترنت با سرعت فضا...")
+        status_msg = await message.edit_text("📥 در حال خفت کردن فایل از اینترنت با سرعت فضا...")
         
         filename = url.split("/")[-1].split("?")[0]
         if not filename:
             filename = f"file_{int(time.time())}.dat"
             
         try:
-            loop = asyncio.get_event_loop()
-            success = loop.run_until_complete(download_file(url, filename))
+            success = await download_file(url, filename)
             
             if success and os.path.exists(filename):
-                status_msg.edit_text("📤 دانلود روی سرور ردیف شد! در حال آپلود توی چت...")
-                client.send_document(chat_id, document=filename, caption=f"⚡️ فایلت ردیف شد سالار:\n📦 `{filename}`")
-                status_msg.delete()
+                await status_msg.edit_text("📤 دانلود روی سرور ردیف شد! در حال آپلود توی چت...")
+                await client.send_document(chat_id, document=filename, caption=f"⚡️ فایلت ردیف شد سالار:\n📦 `{filename}`")
+                await status_msg.delete()
                 os.remove(filename)
             else:
-                status_msg.edit_text("❌ نشد که بشه! سرور لینک رو رد کرد یا فایل دانلود نشد.")
+                await status_msg.edit_text("❌ نشد که بشه! سرور لینک رو رد کرد یا فایل دانلود نشد.")
         except Exception as e:
-            status_msg.edit_text(f"❌ کار گره خورد مشتی. خطا:\n`{e}`")
+            await status_msg.edit_text(f"❌ کار گره خورد مشتی. خطا:\n`{e}`")
             if os.path.exists(filename): os.remove(filename)
         return
 
     # 🔹 قابلیت پرواز هواپیما روی متن (.fly)
     if text.startswith(".fly "):
         input_text = text.split(".fly ", 1)[1].strip()
-        message.delete()
+        await message.delete()
         
-        fly_msg = client.send_message(chat_id, "✈️")
-        time.sleep(0.3)
+        fly_msg = await client.send_message(chat_id, "✈️")
+        await asyncio.sleep(0.3)
         
         frames = [
             f"✈️ {input_text[:2]}",
@@ -136,8 +136,8 @@ def admin_commands(client, message):
         
         try:
             for frame in frames:
-                fly_msg.edit_text(frame)
-                time.sleep(0.4)
+                await fly_msg.edit_text(frame)
+                await asyncio.sleep(0.4)
         except: pass
         return
 
@@ -145,10 +145,10 @@ def admin_commands(client, message):
     if text_lower == ".duel" and message.reply_to_message:
         reply = message.reply_to_message
         enemy = reply.from_user.first_name if reply.from_user else "حریف"
-        message.delete()
+        await message.delete()
         
-        duel_msg = client.send_message(chat_id, f"⚔️ کل‌کل بالا گرفت! دوئل بین **آریا** و **{enemy}** شروع شد!")
-        time.sleep(1)
+        duel_msg = await client.send_message(chat_id, f"⚔️ کل‌کل بالا گرفت! دوئل بین **آریا** و **{enemy}** شروع شد!")
+        await asyncio.sleep(1)
         
         hp_aria, hp_enemy = 100, 100
         
@@ -171,11 +171,11 @@ def admin_commands(client, message):
                     f"👤 {enemy}: `[{hp_enemy}%]` {'❤️' if hp_enemy > 40 else '💔'}\n\n"
                     f"🎬 گزارش زنده: _{action}_"
                 )
-                duel_msg.edit_text(status)
-                time.sleep(1.2)
+                await duel_msg.edit_text(status)
+                await asyncio.sleep(1.2)
             
             winner = "آریا پرچم بالاست! 🎉" if hp_aria > 0 else f"{enemy} شانس آورد ربات بود... 🤖"
-            duel_msg.edit_text(f"🏁 **پایان دعوا!**\n\n🏆 برنده نهایی معرکه: **{winner}**")
+            await duel_msg.edit_text(f"🏁 **پایان دعوا!**\n\n🏆 برنده نهایی معرکه: **{winner}**")
         except: pass
         return
 
@@ -186,19 +186,19 @@ def admin_commands(client, message):
             if len(parts) >= 3:
                 count = int(parts[1])
                 msg_text = parts[2]
-                message.delete()
+                await message.delete()
                 for _ in range(count):
-                    client.send_message(chat_id, msg_text)
-                    time.sleep(0.3)
+                    await client.send_message(chat_id, msg_text)
+                    await asyncio.sleep(0.3)
         except Exception as e:
-            client.send_message("me", f"❌ ستون خطایی تو بمب باران رخ داد:\n{e}")
+            await client.send_message("me", f"❌ ستون خطایی تو بمب باران رخ داد:\n{e}")
         return
 
     # 🔹 قابلیت متحرک تابلو روان (.marquee)
     if text.startswith(".marquee "):
         input_text = text.split(".marquee ", 1)[1].strip()
-        message.delete()
-        marquee_msg = client.send_message(chat_id, "🎬 ردیف کردن تابلو روان...")
+        await message.delete()
+        marquee_msg = await client.send_message(chat_id, "🎬 ردیف کردن تابلو روان...")
         
         display_width = 15
         padded_text = " " * display_width + input_text + " " * display_width
@@ -206,16 +206,16 @@ def admin_commands(client, message):
         try:
             for i in range(len(padded_text) - display_width + 1):
                 frame = padded_text[i:i + display_width]
-                marquee_msg.edit_text(f"📟 `[ {frame} ]`")
-                time.sleep(0.4)
+                await marquee_msg.edit_text(f"📟 `[ {frame} ]`")
+                await asyncio.sleep(0.4)
         except: pass
         return
 
     # 🔹 قابلیت مانیتور زنده قیمت دلار تهران و تتر (.live_crypto)
     if text_lower == ".live_crypto":
         live_crypto_active[chat_id] = True
-        message.delete()
-        crypto_msg = client.send_message(chat_id, "💵 خفت کردن قیمت دلار و تتر از کف بازار...")
+        await message.delete()
+        crypto_msg = await client.send_message(chat_id, "💵 خفت کردن قیمت دلار و تتر از کف بازار...")
         
         last_tether, last_dollar = 0, 0
         url = "https://api.keybit.ir/uasi/" 
@@ -237,66 +237,66 @@ def admin_commands(client, message):
                     f"{dollar_emoji} **دلار تهران:** `{dollar_price:,} تومان`\n\n"
                     f"⏱ *بروزرسانی خودکار | ساعت مخلصتیم: {datetime.now().strftime('%H:%M:%S')}*"
                 )
-                crypto_msg.edit_text(box)
-                time.sleep(10)
+                await crypto_msg.edit_text(box)
+                await asyncio.sleep(10)
         except: pass
         return
 
     if text_lower == ".stop_live":
         if chat_id in live_crypto_active:
             live_crypto_active[chat_id] = False
-            message.edit_text("🛑 دکون تابلوی قیمت ارز رو تخته کردم سالار.")
+            await message.edit_text("🛑 دکون تابلوی قیمت ارز رو تخته کردم سالار.")
         return
 
     # 🔹 قابلیت افکت لایو متنی (.effect)
     if text.startswith(".effect "):
         gif_text = text.split(".effect ", 1)[1].strip()
-        status_msg = message.edit_text("🎨 در حال رندر و ردیف کردن افکت متنی...")
+        status_msg = await message.edit_text("🎨 در حال رندر و ردیف کردن افکت متنی...")
         
         try:
-            f1 = client.send_message(chat_id, f"🔥 **{gif_text}** 🔥")
-            time.sleep(0.4)
-            f2 = client.send_message(chat_id, f"✨ ` {gif_text} ` ✨")
-            time.sleep(0.4)
-            f3 = client.send_message(chat_id, f"⚡️ __ {gif_text} __ ⚡️")
+            f1 = await client.send_message(chat_id, f"🔥 **{gif_text}** 🔥")
+            await asyncio.sleep(0.4)
+            f2 = await client.send_message(chat_id, f"✨ ` {gif_text} ` ✨")
+            await asyncio.sleep(0.4)
+            f3 = await client.send_message(chat_id, f"⚡️ __ {gif_text} __ ⚡️")
             
-            client.delete_messages(chat_id, [f1.id, f2.id, f3.id])
-            message.delete()
+            await client.delete_messages(chat_id, [f1.id, f2.id, f3.id])
+            await message.delete()
             
-            client.send_message(chat_id, f"🎬 **[ {gif_text} ]**")
-            status_msg.delete()
+            await client.send_message(chat_id, f"🎬 **[ {gif_text} ]**")
+            await status_msg.delete()
         except Exception as e:
-            status_msg.edit_text(f"❌ اِ لاتی شد که! خطا داد: {e}")
+            await status_msg.edit_text(f"❌ اِ لاتی شد که! خطا داد: {e}")
         return
 
     # دستورات تنظیماتی مدیریتی (محدود شده به محیط سیو مسج جهت امنیت)
     if is_saved_messages:
         if text_lower == "night mode on":
             settings["night_mode"] = True
-            message.reply_text("🌙 **مود شب اوکی شد فرمانده.**\n(از ۱۲ شب تا ۸ صبح هر کی بیاد منشی با لاتی‌ترین لحن جوابشو میده)")
+            await message.reply_text("🌙 **مود شب اوکی شد فرمانده.**\n(از ۱۲ شب تا ۸ صبح هر کی بیاد منشی با لاتی‌ترین لحن جوابشو میده)")
             return
         elif text_lower == "night mode off":
             settings["night_mode"] = False
-            message.reply_text("☀️ **مود شب مرخص شد؛ خودم بیدارم سالار.**")
+            await message.reply_text("☀️ **مود شب مرخص شد؛ خودم بیدارم سالار.**")
             return
 
         if text_lower == "group bot on":
             settings["group_assistant"] = True
-            message.reply_text("👥 **بادیگارد گروه‌ها فعال شد؛ تگت کنن هواتو دارم.**")
+            await message.reply_text("👥 **بادیگارد گروه‌ها فعال شد؛ تگت کنن هواتو دارم.**")
             return
         elif text_lower == "group bot off":
             settings["group_assistant"] = False
-            message.reply_text("👥 **منشی گروه‌ها رفت استراحت.**")
+            await message.reply_text("👥 **منشی گروه‌ها رفت استراحت.**")
             return
 
         if text_lower.startswith("set status "):
             new_status = text.split("set status ", 1)[1].strip()
             settings["status"] = new_status
-            message.reply_text(f"📌 **وضعیت جدیدت رو کوک کردم مخلص:**\n» `{new_status}`")
+            await message.reply_text(f"📌 **وضعیت جدیدت رو کوک کردم مخلص:**\n» `{new_status}`")
             return
         elif text_lower == "clear status":
             settings["status"] = "آفلاین"
-            message.reply_text("🧹 **وضعیت چاکریم رو ریست کردم؛ رفت رو حالت آفلاین.**")
+            await message.reply_text("🧹 **وضعیت چاکریم رو ریست کردم؛ رفت رو حالت آفلاین.**")
             return
 
         if text_lower == "status":
@@ -319,48 +319,49 @@ def admin_commands(client, message):
                 f"🌙 **مود شب:** {'✅ بیداره' if settings['night_mode'] else '❌ بیخیال'}\n"
                 f"📌 **کجا پلاسی؟** `{settings['status']}`"
             )
-            message.reply_text(info_text)
+            await message.reply_text(info_text)
             return
 
         if text_lower.startswith("profile "):
             target = text.split("profile ", 1)[1].strip()
-            status_msg = message.reply_text("🔍 در حال خفت کردن عکس‌های پروفایل طرف...")
+            status_msg = await message.reply_text("🔍 در حال خفت کردن عکس‌های پروفایل طرف...")
             try:
-                user = client.get_users(target)
-                photos = [p for p in client.get_chat_photos(user.id)]
+                user = await client.get_users(target)
+                photos = []
+                async for photo in client.get_chat_photos(user.id):
+                    photos.append(photo)
                 if not photos:
-                    status_msg.edit_text("❌ طرف اصلاً عکس پروفایل نداره که!")
+                    await status_msg.edit_text("❌ طرف اصلاً عکس پروفایل نداره که!")
                     return
                 for idx, photo in enumerate(photos, 1):
-                    file_path = client.download_media(photo.file_id)
-                    client.send_document("me", document=file_path, caption=f"👤 داشمون: {user.first_name}\n🖼 فریم عکس: {idx}")
-                status_msg.delete()
+                    file_path = await client.download_media(photo.file_id)
+                    await client.send_document("me", document=file_path, caption=f"👤 داشمون: {user.first_name}\n🖼 فریم عکس: {idx}")
+                await status_msg.delete()
             except Exception as e:
-                status_msg.edit_text(f"❌ کار گره خورد سالار: {e}")
+                await status_msg.edit_text(f"❌ کار گره خورد سالار: {e}")
             return
 
     # 🔹 باکس کدهای پایتونی (Code Box)
     if text_lower.startswith("code "):
         code_content = text.split("code ", 1)[1].strip()
-        message.edit_text(f"```python\n{code_content}\n```")
+        await message.edit_text(f"```python\n{code_content}\n```")
         return
 
     # 🔹 قابلیت پاکسازی سریع چت خودت (Self Purge)
     if text_lower.startswith("del "):
         try:
             limit = int(text.split("del ", 1)[1].strip())
-            message.delete()
+            await message.delete()
             
-            async_gen = client.get_chat_history(chat_id)
             my_messages = []
-            for msg in async_gen:
+            async for msg in client.get_chat_history(chat_id):
                 if msg.from_user and msg.from_user.is_self:
                     my_messages.append(msg.id)
                 if len(my_messages) >= limit:
                     break
             
             if my_messages:
-                client.delete_messages(chat_id, my_messages)
+                await client.delete_messages(chat_id, my_messages)
         except: pass
         return
 
@@ -383,9 +384,9 @@ def admin_commands(client, message):
                 f"🤖 **رباته یا آدم؟** {is_bot}\n"
                 f"🌐 **سرور متصل (Data Center):** دی‌سی {dc_id}\n"
             )
-            message.edit_text(info_box)
+            await message.edit_text(info_box)
         else:
-            message.reply_text("❌ این پیام بی‌صاحابه، فرستنده‌اش معلوم نیست.")
+            await message.reply_text("❌ این پیام بی‌صاحابه، فرستنده‌اش معلوم نیست.")
         return
 
     # 🔹 قابلیت تاریخ ساخت اکانت حدودی (Chat Age) با ریپلای
@@ -401,21 +402,21 @@ def admin_commands(client, message):
             elif uid < 2000000000: year = "۲۰۲۲ ~ ۲۰۲۳ (امروزی)"
             else: year = "۲۰۲۴ به بعد (جوجه تلگرامی جدید)"
             
-            message.edit_text(f"📅 **چرتکه‌اندازی قدمت اکانت:**\n\n👤 این رفیقمون اکانتشو حدوداً سال **{year}** ردیف کرده.")
+            await message.edit_text(f"📅 **چرتکه‌اندازی قدمت اکانت:**\n\n👤 این رفیقمون اکانتشو حدوداً سال **{year}** ردیف کرده.")
         return
 
     # 🔹 قابلیت ارتقایافته آمارگیر پیام‌ها: حالا کل تاریخچه چت رو جارو می‌کنه بدون محدودیت ۱۰۰ تا
     if text_lower == "stats":
-        status_msg = message.edit_text("📊 در حال چرتکه‌اندازی کل تاریخچه پیام‌های این چت... (کمی صبور باش)")
+        status_msg = await message.edit_text("📊 در حال چرتکه‌اندازی کل تاریخچه پیام‌های این چت... (کمی صبور باش)")
         try:
             m_count, p_count, v_count, s_count = 0, 0, 0, 0
-            for msg in client.get_chat_history(chat_id): # برداشتن لیمیت چت واسه جارو کردن کل گپ
+            async for msg in client.get_chat_history(chat_id): # برداشتن لیمیت چت واسه جارو کردن کل گپ
                 m_count += 1
                 if msg.photo: p_count += 1
                 elif msg.voice or msg.audio: v_count += 1
                 elif msg.sticker: s_count += 1
             
-            status_msg.edit_text(
+            await status_msg.edit_text(
                 "📈 **آمار و رقم کل پیام‌های این چت از روز اول:**\n\n"
                 f"💬 کل پیام‌های رد و بدل شده: {m_count}\n"
                 f"🖼 آمار عکس‌ها: {p_count}\n"
@@ -423,50 +424,50 @@ def admin_commands(client, message):
                 f"🎭 آمار استیکرها: {s_count}"
             )
         except Exception as e:
-            status_msg.edit_text(f"❌ خطا تو چرتکه‌اندازی کل تاریخچه گپ: {e}")
+            await status_msg.edit_text(f"❌ خطا تو چرتکه‌اندازی کل تاریخچه گپ: {e}")
         return
 
     # 🔹 قابلیت ساعت دیجیتال آنلاین (Live Clock)
     if text_lower == "clock":
         live_clocks[chat_id] = True
-        message.delete()
-        clock_msg = client.send_message(chat_id, "🕒 در حال کوک کردن ساعت زنده...")
+        await message.delete()
+        clock_msg = await client.send_message(chat_id, "🕒 در حال کوک کردن ساعت زنده...")
         try:
             while chat_id in live_clocks and live_clocks[chat_id]:
                 now_str = datetime.now().strftime("%H:%M:%S")
-                clock_msg.edit_text(f"⏱ **ساعت لایو و ثانیه‌شمار آریا:**\n\n🕒 `[ {now_str} ]`")
-                time.sleep(2)
+                await clock_msg.edit_text(f"⏱ **ساعت لایو و ثانیه‌شمار آریا:**\n\n🕒 `[ {now_str} ]`")
+                await asyncio.sleep(2)
         except: pass
         return
 
     if text_lower == "stopclock":
         if chat_id in live_clocks:
             live_clocks[chat_id] = False
-            message.edit_text("🛑 ساعت زنده رو خوابوندم ردیف شد.")
+            await message.edit_text("🛑 ساعت زنده رو خوابوندم ردیف شد.")
         return
 
     # 🔹 قابلیت تگ همگانی مخفی (Mention All) در گروه‌ها
     if text_lower.startswith("all ") and message.chat.type.value in ["group", "supergroup"]:
         custom_text = text.split("all ", 1)[1].strip()
-        message.delete()
+        await message.delete()
         
         try:
             mentions = ""
             count = 0
-            for member in client.get_chat_members(chat_id):
+            async for member in client.get_chat_members(chat_id):
                 if member.user.is_bot or member.user.is_self:
                     continue
                 mentions += f"[\u200b](tg://user?id={member.user.id})"
                 count += 1
                 
                 if count >= 20:
-                    client.send_message(chat_id, f"{custom_text}{mentions}")
+                    await client.send_message(chat_id, f"{custom_text}{mentions}")
                     mentions = ""
                     count = 0
-                    time.sleep(0.5)
+                    await asyncio.sleep(0.5)
             
             if mentions:
-                client.send_message(chat_id, f"{custom_text}{mentions}")
+                await client.send_message(chat_id, f"{custom_text}{mentions}")
         except: pass
         return
 
@@ -475,16 +476,16 @@ def admin_commands(client, message):
         reply = message.reply_to_message
         
         if text_lower == "sticker" and (reply.photo or reply.document):
-            status_msg = message.reply_text("⏳ وایسا عکس رو بچپونم تو قالب استیکر...")
+            status_msg = await message.reply_text("⏳ وایسا عکس رو بچپونم تو قالب استیکر...")
             try:
-                file_path = client.download_media(reply)
+                file_path = await client.download_media(reply)
                 img = Image.open(file_path)
                 sticker_path = "sticker.webp"
                 img.save(sticker_path, "WEBP")
                 
-                message.delete()
-                client.send_sticker(chat_id, sticker=sticker_path)
-                status_msg.delete()
+                await message.delete()
+                await client.send_sticker(chat_id, sticker=sticker_path)
+                await status_msg.delete()
                 os.remove(file_path)
                 os.remove(sticker_path)
             except: pass
@@ -493,17 +494,17 @@ def admin_commands(client, message):
         if text_lower == "pic" and reply.sticker:
             if reply.sticker.is_animated or reply.sticker.is_video:
                 return
-            status_msg = message.reply_text("⏳ وایسا عکس باکیفیت رو از دل استیکر بکشم بیرون...")
+            status_msg = await message.reply_text("⏳ وایسا عکس باکیفیت رو از دل استیکر بکشم بیرون...")
             try:
-                file_path = client.download_media(reply)
+                file_path = await client.download_media(reply)
                 img = Image.open(file_path)
                 img = img.convert("RGB")
                 photo_path = "photo.jpg"
                 img.save(photo_path, "JPEG")
                 
-                message.delete()
-                client.send_photo(chat_id, photo=photo_path, caption=f"🖼 عکسی که از تو شکم استیکر کشیدم بیرون مخلص!")
-                status_msg.delete()
+                await message.delete()
+                await client.send_photo(chat_id, photo=photo_path, caption=f"🖼 عکسی که از تو شکم استیکر کشیدم بیرون مخلص!")
+                await status_msg.delete()
                 os.remove(file_path)
                 os.remove(photo_path)
             except: pass
@@ -511,7 +512,7 @@ def admin_commands(client, message):
 
 # --- قابلیت ذخیره خودکار مدیاهای یکبار مصرف گروه‌ها (Anti View-Once) ---
 @app.on_message(~filters.me & (filters.private | filters.group))
-def catch_view_once(client, message):
+async def catch_view_once(client, message):
     is_vo = False
     if message.photo and message.photo.ttl_seconds: is_vo = True
     elif message.video and message.video.ttl_seconds: is_vo = True
@@ -520,11 +521,11 @@ def catch_view_once(client, message):
         try:
             sender_name = message.from_user.first_name if message.from_user else "ناشناس"
             
-            file_path = client.download_media(message)
+            file_path = await client.download_media(message)
             if message.photo:
-                client.send_photo("me", photo=file_path, caption=f"📸 فرستنده: {sender_name}")
+                await client.send_photo("me", photo=file_path, caption=f"📸 فرستنده: {sender_name}")
             else:
-                client.send_video("me", video=file_path, caption=f"🎥 فرستنده: {sender_name}")
+                await client.send_video("me", video=file_path, caption=f"🎥 فرستنده: {sender_name}")
                 
             if os.path.exists(file_path):
                 os.remove(file_path)
@@ -544,24 +545,24 @@ def catch_view_once(client, message):
     # مدیریت بازی دوز در جریان (محیط پی‌وی)
     if not is_group and chat_id in games:
         game = games[chat_id]
-        try: message.delete()
+        try: await message.delete()
         except: pass
         
         if text == "لغو":
-            try: client.delete_messages(chat_id, [game["bot_msg_id"], game["user_dooz_msg_id"], game.get("diff_msg_id")])
+            try: await client.delete_messages(chat_id, [game["bot_msg_id"], game["user_dooz_msg_id"], game.get("diff_msg_id")])
             except: pass
             del games[chat_id]
-            client.send_message(chat_id, "بیخیال بازی شدیم داش، کنسل شد.")
+            await client.send_message(chat_id, "بیخیال بازی شدیم داش، کنسل شد.")
             return
             
         if game["difficulty"] is None:
             if text in ["راحت", "معمولی", "هارد", "فوق سخت"]:
                 game["difficulty"] = text
-                try: client.delete_messages(chat_id, [game["diff_msg_id"]])
+                try: await client.delete_messages(chat_id, [game["diff_msg_id"]])
                 except: pass
                 initial_board = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣"]
                 game["board"] = initial_board
-                bot_msg = client.send_message(chat_id, f"🎮 دستا بالا دوز شروع شد! (درجه سختی مچ‌اندازی: {text})\n\n" + render_board(initial_board))
+                bot_msg = await client.send_message(chat_id, f"🎮 دستا بالا دوز شروع شد! (درجه سختی مچ‌اندازی: {text})\n\n" + render_board(initial_board))
                 game["bot_msg_id"] = bot_msg.id
             return
             
@@ -576,7 +577,7 @@ def catch_view_once(client, message):
                 board[idx] = "❌"
                 if check_winner(board):
                     del games[chat_id]
-                    clean_game_end(client, chat_id, "🎉 بردی ستون! دمت گرم چسبید، پرچمت بالاست.", game)
+                    await clean_game_end(client, chat_id, "🎉 بردی ستون! دمت گرم چسبید، پرچمت بالاست.", game)
                     return
                     
                 bot_idx = get_bot_move(board, game["difficulty"])
@@ -585,9 +586,9 @@ def catch_view_once(client, message):
                     
                 if check_winner(board):
                     del games[chat_id]
-                    clean_game_end(client, chat_id, "🤖 هوش مصنوعی زد جلو مخلص! دفعه بعد قوی‌تر بیا رینگ.", game)
+                    await clean_game_end(client, chat_id, "🤖 هوش مصنوعی زد جلو مخلص! دفعه بعد قوی‌تر بیا رینگ.", game)
                     return
-                try: client.edit_message_text(chat_id, bot_msg_id, f"🎮 درجه سختی دعوا: {game['difficulty']}\n\n" + render_board(board))
+                try: await client.edit_message_text(chat_id, bot_msg_id, f"🎮 درجه سختی دعوا: {game['difficulty']}\n\n" + render_board(board))
                 except: pass
             return
 
@@ -595,7 +596,7 @@ def catch_view_once(client, message):
     if not is_group and text in ["دوز", "dooz"]:
         if settings["night_mode"] and (0 <= current_hour < 8):
             return
-        diff_msg = message.reply_text("🤖 **یکی رو انتخاب کن واسه بازی مشتی دوز:**\n\nبنویس واسم:\n🔹 `راحت`\n🔹 `معمولی`\n🔹 `هارد`\n🔹 `فوق سخت`")
+        diff_msg = await message.reply_text("🤖 **یکی رو انتخاب کن واسه بازی مشتی دوز:**\n\nبنویس واسم:\n🔹 `راحت`\n🔹 `معمولی`\n🔹 `هارد`\n🔹 `فوق سخت`")
         games[chat_id] = {"board": [], "difficulty": None, "bot_msg_id": None, "user_dooz_msg_id": message.id, "diff_msg_id": diff_msg.id}
         return
 
@@ -621,16 +622,16 @@ def catch_view_once(client, message):
                 "الان ساعت از نیمه‌شب گذشته و آریا تخت خوابیده (یا شایدم داره گیم می‌زنه) 😴\n"
                 "نوتیف چتت رو سایلنت کردم که بیدار نشه. فردا که بلند شد اولین کاری که می‌کنه اینه که میاد پی‌ویت. شب خوش! 🌙"
             )
-        message.reply_text(reply_text)
+        await message.reply_text(reply_text)
         
         # 🎤 ارسال ویس منشی در پی‌وی برای مود شب
         if not is_group:
             try:
-                client.send_chat_action(chat_id, ChatAction.RECORD_AUDIO)
+                await client.send_chat_action(chat_id, ChatAction.RECORD_AUDIO)
                 voice_file = f"voice_{chat_id}.ogg"
                 tts = gTTS(text=reply_text, lang='fa', slow=False)
                 tts.save(voice_file)
-                client.send_voice(chat_id, voice=voice_file, caption="🎙 منشی صوتی آریا (مود شب)")
+                await client.send_voice(chat_id, voice=voice_file, caption="🎙 منشی صوتی آریا (مود شب)")
                 os.remove(voice_file)
             except: pass
             
@@ -663,19 +664,19 @@ def catch_view_once(client, message):
             )
         else:
             reply_text = (
-                f"سلام سلااام! چطوری رفیق؟ مخلصیم. 😍\n"
+                f"سلام سلااام! چطوری رفیق？ مخلصیم. 😍\n"
                 f"من دستیار آریام؛ آریا الان آنلاین نیست و در وضعیت [ **{current_status}** ] قرار داره. پیامت رو گرفتم و جاش کاملاً امنه. وقتی بیاد اولین کاری که میکنه اینه که میاد پی‌ویت. خیالت تختِ تخت! ✌️\n\n"
                 f"⚠️ **توجه:** در صورت تمایل به صبوری و سرگرمی، می‌توانید با ارسال کلمه **«دوز»**، به بازی دوز مشغول شوید تا آریا آنلاین شود."
             )
 
-    client.send_chat_action(chat_id, ChatAction.TYPING)
-    time.sleep(3)
-    message.reply_text(reply_text)
+    await client.send_chat_action(chat_id, ChatAction.TYPING)
+    await asyncio.sleep(3)
+    await message.reply_text(reply_text)
     
     # 🎤 قابلیت جدید: منشی صوتی با gTTS (مخصوص چت خصوصی)
     if not is_group:
         try:
-            client.send_chat_action(chat_id, ChatAction.RECORD_AUDIO)
+            await client.send_chat_action(chat_id, ChatAction.RECORD_AUDIO)
             voice_file = f"voice_{chat_id}.ogg"
             
             # تبدیل متن ریپلای شده به فایل صوتی
@@ -683,7 +684,7 @@ def catch_view_once(client, message):
             tts.save(voice_file)
             
             # ارسال ویس تلگرامی
-            client.send_voice(chat_id, voice=voice_file, caption="🎙 منشی صوتی آریا")
+            await client.send_voice(chat_id, voice=voice_file, caption="🎙 منشی صوتی آریا")
             os.remove(voice_file)
         except Exception as e:
             print(f"خطا در ردیف کردن ویس هوشمند: {e}")
@@ -714,14 +715,14 @@ def get_bot_move(board, diff):
         if check_winner(board_copy) == "❌": return move
     return random.choice(empty)
 
-def clean_game_end(client, chat_id, final_text, game):
-    end_msg = client.send_message(chat_id, final_text)
-    time.sleep(4)
-    try: client.delete_messages(chat_id, [end_msg.id, game["bot_msg_id"], game["user_dooz_msg_id"], game.get("diff_msg_id")])
+async def clean_game_end(client, chat_id, final_text, game):
+    end_msg = await client.send_message(chat_id, final_text)
+    await asyncio.sleep(4)
+    try: await client.delete_messages(chat_id, [end_msg.id, game["bot_msg_id"], game["user_dooz_msg_id"], game.get("diff_msg_id")])
     except: pass
 
 @app.on_message(filters.private & filters.me)
-def clear_game_on_my_reply(client, message):
+async def clear_game_on_my_reply(client, message):
     chat_id = message.chat.id
     if chat_id in games: del games[chat_id]
 
