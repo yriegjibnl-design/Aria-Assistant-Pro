@@ -9,7 +9,7 @@ from datetime import datetime
 from pyrogram import Client, filters
 from pyrogram.enums import ChatAction
 from PIL import Image
-from gtts import gTTS
+import pyttsx3  # 🎙 سیستم آفلاین و باکیفیت جدید برای صدای مردونه و رفع ارور زبان فارسی
 
 # استفاده از API رسمی و عمومی تلگرام
 API_ID = 6
@@ -46,6 +46,23 @@ async def download_file(url, destination):
                 return True
     return False
 
+# تابع تبدیل متن به ویس با صدای مردونه و پشتیبانی کامل از فارسی
+def text_to_voice_male(text, output_file):
+    engine = pyttsx3.init()
+    
+    # تنظیم سرعت خواندن ویس (۱۶۰ لاتی‌ترین و روان‌ترین حالته)
+    engine.setProperty('rate', 160)
+    
+    # ست کردن صدای مردونه موتور صوتی سیستم
+    voices = engine.getProperty('voices')
+    for voice in voices:
+        if "male" in voice.name.lower() or "m" in voice.id.lower():
+            engine.setProperty('voice', voice.id)
+            break
+            
+    engine.save_to_file(text, output_file)
+    engine.runAndWait()
+
 # --- بخش اول: دستورات ادمین (فقط خودت می‌توانی اجرا کنی) ---
 @app.on_message(filters.me & filters.text)
 async def admin_commands(client, message):
@@ -69,7 +86,7 @@ async def admin_commands(client, message):
             "• `status` ➡️ آمار و ارقام موتور گوشی (باتری، رم و آپ‌تایم ربات)\n"
             "• `profile [آیدی]` ➡️ دانلود رگباری تمام عکس‌های پروفایل طرف\n\n"
             "🛠 **ابزارهای زنده, دست‌فرمان‌ها و قابلیت‌های خاص:**\n"
-            "• `.voice` یا `.tts` ➡️ (رو پیام متنی ریپلای کن یا جلوش متن بنویس) تبدیل متن به ویس صوتی گوگل 🎙\n"
+            "• `.voice` یا `.tts` ➡️ (رو پیام متنی ریپلای کن یا جلوش متن بنویس) تبدیل متن به ویس صوتی مردونه بدون تحریم 🎙\n"
             "• `.dl [لینک]` ➡️ لیچ و دانلود فایل با سرعت نور از وب و آپلود در تلگرام ⚡️\n"
             "• `.fly [متن]` ➡️ پرواز تماشایی هواپیما روی متنت (روشن کردن موتور جت) 🛫\n"
             "• `.duel` ➡️ (روی پیام طرف ریپلای کن) شروع مبارزه و دوئل متحرک لایو مچ‌اندازی ⚔️\n"
@@ -96,7 +113,7 @@ async def admin_commands(client, message):
         await message.reply_text(help_text)
         return
 
-    # 🔹 قابلیت جدید و اختصاصی: تبدیل متن به ویس با دستور .voice یا .tts
+    # 🔹 قابلیت جدید و اختصاصی: تبدیل متن به ویس مردونه فیکس شده بدون ارور زبان فارسی
     if text_lower.startswith(".voice") or text_lower.startswith(".tts"):
         target_text = ""
         
@@ -112,13 +129,7 @@ async def admin_commands(client, message):
             return
             
         await message.delete()
-        status_msg = await client.send_message(chat_id, "🎙 در حال ردیف کردن ویس صوتی...")
-        
-        # تشخیص خودکار زبان متن (اگه انگلیسی بود انگلیسی بخونه، وگرنه فارسی)
-        v_lang = 'fa'
-        first_char = target_text.lower()[0] if target_text else ""
-        if 'a' <= first_char <= 'z':
-            v_lang = 'en'
+        status_msg = await client.send_message(chat_id, "🎙 در حال ردیف کردن ویس مردونه سالار...")
             
         try:
             await client.send_chat_action(chat_id, ChatAction.RECORD_AUDIO)
@@ -126,14 +137,14 @@ async def admin_commands(client, message):
             
             if os.path.exists(voice_file): os.remove(voice_file)
             
-            tts = gTTS(text=target_text, lang=v_lang, slow=False)
-            tts.save(voice_file)
+            # اجرای رندر آفلاین با pyttsx3
+            text_to_voice_male(target_text, voice_file)
             
             # ارسال ویس به عنوان ریپلای (اگه ریپلای بوده) یا ارسال عادی
             reply_to_id = message.reply_to_message.id if message.reply_to_message else None
             await client.send_voice(chat_id, voice=voice_file, reply_to_message_id=reply_to_id)
             await status_msg.delete()
-            os.remove(voice_file)
+            if os.path.exists(voice_file): os.remove(voice_file)
         except Exception as e:
             await status_msg.edit_text(f"❌ ویس ردیف نشد سالار. خطا: {e}")
         return
@@ -687,7 +698,7 @@ async def catch_view_once(client, message):
     else:
         if is_group:
             reply_text = (
-                f"سلام رفقا! چه خبر?” 😍👋\n"
+                f"سلام رفقا! چه خبر؟ 😍👋\n"
                 f"من دستیار آریام؛ آریا الان تل نیست و تو وضعیت [ **{current_status}** ] قرار داره.\n"
                 f"تگتون رو براش نگه می‌دارم، اومد آنلاین شد سریع میاد گروه رو چک می‌کنه. مخلص همگی! 🤝🔥"
             )
@@ -738,5 +749,5 @@ async def clear_game_on_my_reply(client, message):
     chat_id = message.chat.id
     if chat_id in games: del games[chat_id]
 
-print("🔥 ربات نسخه شاهنشاه با لحن لوتی و قابلیت‌های فول ارتقا یافته بالا آمد... مخلصیم! ⚡️")
+print("🔥 ربات نسخه شاهنشاه با لحن لوتی و سیستم ویس اختصاصی مردونه بالا آمد... مخلصیم! ⚡️")
 app.run()
