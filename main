@@ -3,10 +3,13 @@ import random
 import os
 import psutil
 import requests
+import asyncio
+import aiohttp
 from datetime import datetime
 from pyrogram import Client, filters
 from pyrogram.enums import ChatAction
 from PIL import Image
+from gtts import gTTS
 
 # استفاده از API رسمی و عمومی تلگرام
 API_ID = 6
@@ -28,6 +31,20 @@ settings = {
     "group_assistant": False,  # منشی در گروه‌ها (پیش‌فرض خاموش)
     "status": "آفلاین"         # وضعیت فعلی آریا (باشگاه، گیم، درس و...)
 }
+
+# تابع کمکی جدید برای دانلود ناهمگام و پرسرعت فایل از اینترنت
+async def download_file(url, destination):
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as response:
+            if response.status == 200:
+                with open(destination, 'wb') as f:
+                    while True:
+                        chunk = await response.content.read(1024 * 1024) # تکه‌های ۱ مگابایتی
+                        if not chunk:
+                            break
+                        f.write(chunk)
+                return True
+    return False
 
 # --- بخش اول: دستورات ادمین (فقط خودت می‌توانی اجرا کنی) ---
 @app.on_message(filters.me)
@@ -51,6 +68,7 @@ def admin_commands(client, message):
             "• `status` ➡️ آمار و ارقام موتور گوشی (باتری، رم و آپ‌تایم ربات)\n"
             "• `profile [آیدی]` ➡️ دانلود رگباری تمام عکس‌های پروفایل طرف\n\n"
             "🛠 **ابزارهای زنده, دست‌فرمان‌ها و قابلیت‌های خاص:**\n"
+            "• `.dl [لینک]` ➡️ لیچ و دانلود فایل با سرعت نور از وب و آپلود در تلگرام ⚡️\n"
             "• `.fly [متن]` ➡️ پرواز تماشایی هواپیما روی متنت (روشن کردن موتور جت) 🛫\n"
             "• `.duel` ➡️ (روی پیام طرف ریپلای کن) شروع مبارزه و دوئل متحرک لایو مچ‌اندازی ⚔️\n"
             "• `bomb [تعداد] [متن]` ➡️ به توپ بستن و ارسال رگباری پیام\n"
@@ -58,7 +76,7 @@ def admin_commands(client, message):
             "• `del [تعداد]` ➡️ غیب کردن پیام‌های خودت به صورت دوطرفه و سه‌سوت\n"
             "• `info` ➡️ (رو پیام ریپلای کن) تار و پود و آمار کارآگاهی طرف\n"
             "• `age` ➡️ (رو پیام ریپلای کن) حساب کتابِ اینکه طرف چند ساله تو تلگرامه\n"
-            "• `stats` ➡️ آمار مخلصانه ۱۰۰ پیام آخر این چت\n"
+            "• `stats` ➡️ آمارگیر کل تاریخچه چت جاری بدون هیچ محدودیتی 📊\n"
             "• `clock` ➡️ ساعت دیجیتال زنده و ثانیه‌شمار تو چت\n"
             "• `stopclock` ➡️ متوقف کردن ساعت لایو\n"
             "• `.marquee [متن]` ➡️ راه انداختن تابلوروان متحرک دور متنت\n"
@@ -74,6 +92,31 @@ def admin_commands(client, message):
             "• بفرست `دوز` یا `dooz` تو پی‌وی هر کی؛ ربات ردیف میشه واسه بازی!"
         )
         message.reply_text(help_text)
+        return
+
+    # 🔹 قابلیت جدید: دانلودر و لیچر مافوق صوت با aiohttp (.dl)
+    if text.startswith(".dl "):
+        url = text.split(".dl ", 1)[1].strip()
+        status_msg = message.edit_text("📥 در حال خفت کردن فایل از اینترنت با سرعت فضا...")
+        
+        filename = url.split("/")[-1].split("?")[0]
+        if not filename:
+            filename = f"file_{int(time.time())}.dat"
+            
+        try:
+            loop = asyncio.get_event_loop()
+            success = loop.run_until_complete(download_file(url, filename))
+            
+            if success and os.path.exists(filename):
+                status_msg.edit_text("📤 دانلود روی سرور ردیف شد! در حال آپلود توی چت...")
+                client.send_document(chat_id, document=filename, caption=f"⚡️ فایلت ردیف شد سالار:\n📦 `{filename}`")
+                status_msg.delete()
+                os.remove(filename)
+            else:
+                status_msg.edit_text("❌ نشد که بشه! سرور لینک رو رد کرد یا فایل دانلود نشد.")
+        except Exception as e:
+            status_msg.edit_text(f"❌ کار گره خورد مشتی. خطا:\n`{e}`")
+            if os.path.exists(filename): os.remove(filename)
         return
 
     # 🔹 قابلیت پرواز هواپیما روی متن (.fly)
@@ -361,26 +404,26 @@ def admin_commands(client, message):
             message.edit_text(f"📅 **چرتکه‌اندازی قدمت اکانت:**\n\n👤 این رفیقمون اکانتشو حدوداً سال **{year}** ردیف کرده.")
         return
 
-    # 🔹 قابلیت آمارگیر کل چت (Chat Stats) روی ۱۰۰ پیام اخیر چت جاری
+    # 🔹 قابلیت ارتقایافته آمارگیر پیام‌ها: حالا کل تاریخچه چت رو جارو می‌کنه بدون محدودیت ۱۰۰ تا
     if text_lower == "stats":
-        status_msg = message.edit_text("📊 در حال چرتکه‌اندازی ۱۰۰ تا پیام اخیر چت...")
+        status_msg = message.edit_text("📊 در حال چرتکه‌اندازی کل تاریخچه پیام‌های این چت... (کمی صبور باش)")
         try:
-            m_count, p_count, v_count, s_count = 0, 0, 0
-            for msg in client.get_chat_history(chat_id, limit=100):
+            m_count, p_count, v_count, s_count = 0, 0, 0, 0
+            for msg in client.get_chat_history(chat_id): # برداشتن لیمیت چت واسه جارو کردن کل گپ
                 m_count += 1
                 if msg.photo: p_count += 1
                 elif msg.voice or msg.audio: v_count += 1
                 elif msg.sticker: s_count += 1
             
             status_msg.edit_text(
-                "📈 **آمار و رقم ۱۰۰ تا پیام اخیر این چت:**\n\n"
-                f"💬 کل پیام‌هایی که جارو کردم: {m_count}\n"
+                "📈 **آمار و رقم کل پیام‌های این چت از روز اول:**\n\n"
+                f"💬 کل پیام‌های رد و بدل شده: {m_count}\n"
                 f"🖼 آمار عکس‌ها: {p_count}\n"
                 f"🎙 آمار ویس‌ها و صداها: {v_count}\n"
                 f"🎭 آمار استیکرها: {s_count}"
             )
         except Exception as e:
-            status_msg.edit_text(f"❌ خطا تو چرتکه‌اندازی: {e}")
+            status_msg.edit_text(f"❌ خطا تو چرتکه‌اندازی کل تاریخچه گپ: {e}")
         return
 
     # 🔹 قابلیت ساعت دیجیتال آنلاین (Live Clock)
@@ -475,7 +518,6 @@ def catch_view_once(client, message):
 
     if is_vo:
         try:
-            media_type = "عکس" if message.photo else "ویدیو"
             sender_name = message.from_user.first_name if message.from_user else "ناشناس"
             
             file_path = client.download_media(message)
@@ -563,6 +605,7 @@ def catch_view_once(client, message):
         return
 
     current_status = settings["status"]
+    lang_code = 'fa' # زبان پیش‌فرض ویس گوگل
 
     # ۱. بخش مود شب (ساعت ۱۲ شب تا ۸ صبح)
     if settings["night_mode"] and (0 <= current_hour < 8):
@@ -579,11 +622,24 @@ def catch_view_once(client, message):
                 "نوتیف چتت رو سایلنت کردم که بیدار نشه. فردا که بلند شد اولین کاری که می‌کنه اینه که میاد پی‌ویت. شب خوش! 🌙"
             )
         message.reply_text(reply_text)
+        
+        # 🎤 ارسال ویس منشی در پی‌وی برای مود شب
+        if not is_group:
+            try:
+                client.send_chat_action(chat_id, ChatAction.RECORD_AUDIO)
+                voice_file = f"voice_{chat_id}.ogg"
+                tts = gTTS(text=reply_text, lang='fa', slow=False)
+                tts.save(voice_file)
+                client.send_voice(chat_id, voice=voice_file, caption="🎙 منشی صوتی آریا (مود شب)")
+                os.remove(voice_file)
+            except: pass
+            
         last_replied[chat_id] = now
         return
 
     # ۲. بخش انگلیسی (طول روز)
     if 'a' <= (text_lower[0] if text_lower else "") <= 'z':
+        lang_code = 'en' # تغییر زبان ویس گوگل به انگلیسی
         if is_group:
             reply_text = (
                 f"Yo everyone! 👋\n"
@@ -615,6 +671,23 @@ def catch_view_once(client, message):
     client.send_chat_action(chat_id, ChatAction.TYPING)
     time.sleep(3)
     message.reply_text(reply_text)
+    
+    # 🎤 قابلیت جدید: منشی صوتی با gTTS (مخصوص چت خصوصی)
+    if not is_group:
+        try:
+            client.send_chat_action(chat_id, ChatAction.RECORD_AUDIO)
+            voice_file = f"voice_{chat_id}.ogg"
+            
+            # تبدیل متن ریپلای شده به فایل صوتی
+            tts = gTTS(text=reply_text, lang=lang_code, slow=False)
+            tts.save(voice_file)
+            
+            # ارسال ویس تلگرامی
+            client.send_voice(chat_id, voice=voice_file, caption="🎙 منشی صوتی آریا")
+            os.remove(voice_file)
+        except Exception as e:
+            print(f"خطا در ردیف کردن ویس هوشمند: {e}")
+
     last_replied[chat_id] = now
 
 def render_board(board):
@@ -652,5 +725,5 @@ def clear_game_on_my_reply(client, message):
     chat_id = message.chat.id
     if chat_id in games: del games[chat_id]
 
-print("🔥 ربات نسخه شاهنشاه با لحن لوتی و فایل‌های بهینه‌سازی شده بالا آمد... مخلصیم! ⚡️")
+print("🔥 ربات نسخه شاهنشاه با لحن لوتی و قابلیت‌های فول ارتقا یافته بالا آمد... مخلصیم! ⚡️")
 app.run()
