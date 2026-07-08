@@ -4,4 +4,5 @@ pillow==10.4.0
 psutil==6.0.0
 requests==2.32.3
 aiohttp==3.11.11
-pyttsx3
+edge-tts
+
