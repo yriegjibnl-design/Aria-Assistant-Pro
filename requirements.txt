@@ -1,0 +1,6 @@
+pyrogram
+tgcrypto
+psutil
+Pillow
+requests
+
