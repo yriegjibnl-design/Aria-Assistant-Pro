@@ -9,7 +9,7 @@ from datetime import datetime
 from pyrogram import Client, filters
 from pyrogram.enums import ChatAction
 from PIL import Image
-import pyttsx3  # 🎙 سیستم آفلاین و باکیفیت جدید برای صدای مردونه و رفع ارور زبان فارسی
+import edge_tts  # 🎙 سیستم بدون ارور و فوق‌العاده طبیعی برای صدای مردونه فارسی و انگلیسی
 
 # استفاده از API رسمی و عمومی تلگرام
 API_ID = 6
@@ -46,22 +46,16 @@ async def download_file(url, destination):
                 return True
     return False
 
-# تابع تبدیل متن به ویس با صدای مردونه و پشتیبانی کامل از فارسی
-def text_to_voice_male(text, output_file):
-    engine = pyttsx3.init()
-    
-    # تنظیم سرعت خواندن ویس (۱۶۰ لاتی‌ترین و روان‌ترین حالته)
-    engine.setProperty('rate', 160)
-    
-    # ست کردن صدای مردونه موتور صوتی سیستم
-    voices = engine.getProperty('voices')
-    for voice in voices:
-        if "male" in voice.name.lower() or "m" in voice.id.lower():
-            engine.setProperty('voice', voice.id)
-            break
-            
-    engine.save_to_file(text, output_file)
-    engine.runAndWait()
+# تابع فوق‌العاده پیشرفته و طبیعی تبدیل متن به ویس مردونه بدون نیاز به ابزارهای لینوکس
+async def text_to_voice_male(text, output_file):
+    # تشخیص زبان متن؛ اگه کلمات فارسی داشت از صدای فرید و اگه انگلیسی بود از صدای برایان استفاده میکنه
+    if any(char in "ابپتثجچحخدذرزژسشصضطظعغفقکگلمنوهی" for char in text):
+        voice_style = "fa-IR-FaridNeural"  # صدای مردونه طبیعی فارسی 🧔🏻
+    else:
+        voice_style = "en-US-BrianNeural"  # صدای مردونه طبیعی انگلیسی 🧔🏼
+        
+    communicate = edge_tts.Communicate(text, voice_style)
+    await communicate.save(output_file)
 
 # --- بخش اول: دستورات ادمین (فقط خودت می‌توانی اجرا کنی) ---
 @app.on_message(filters.me & filters.text)
@@ -113,14 +107,12 @@ async def admin_commands(client, message):
         await message.reply_text(help_text)
         return
 
-    # 🔹 قابلیت جدید و اختصاصی: تبدیل متن به ویس مردونه فیکس شده بدون ارور زبان فارسی
+    # 🔹 قابلیت ارتقایافته و فیکس شده تبدیل متن به ویس مردونه بدون ارور
     if text_lower.startswith(".voice") or text_lower.startswith(".tts"):
         target_text = ""
         
-        # اگه جلوی دستور متن نوشته بودی
         if " " in text:
             target_text = text.split(" ", 1)[1].strip()
-        # اگه روی پیامی ریپلای کرده بودی
         elif message.reply_to_message and message.reply_to_message.text:
             target_text = message.reply_to_message.text.strip()
             
@@ -137,10 +129,9 @@ async def admin_commands(client, message):
             
             if os.path.exists(voice_file): os.remove(voice_file)
             
-            # اجرای رندر آفلاین با pyttsx3
-            text_to_voice_male(target_text, voice_file)
+            # اجرای رندر بدون ارور سیستم‌عامل به صورت ناهمگام
+            await text_to_voice_male(target_text, voice_file)
             
-            # ارسال ویس به عنوان ریپلای (اگه ریپلای بوده) یا ارسال عادی
             reply_to_id = message.reply_to_message.id if message.reply_to_message else None
             await client.send_voice(chat_id, voice=voice_file, reply_to_message_id=reply_to_id)
             await status_msg.delete()
