@@ -69,6 +69,7 @@ async def admin_commands(client, message):
             "• `status` ➡️ آمار و ارقام موتور گوشی (باتری، رم و آپ‌تایم ربات)\n"
             "• `profile [آیدی]` ➡️ دانلود رگباری تمام عکس‌های پروفایل طرف\n\n"
             "🛠 **ابزارهای زنده, دست‌فرمان‌ها و قابلیت‌های خاص:**\n"
+            "• `.voice` یا `.tts` ➡️ (رو پیام متنی ریپلای کن یا جلوش متن بنویس) تبدیل متن به ویس صوتی گوگل 🎙\n"
             "• `.dl [لینک]` ➡️ لیچ و دانلود فایل با سرعت نور از وب و آپلود در تلگرام ⚡️\n"
             "• `.fly [متن]` ➡️ پرواز تماشایی هواپیما روی متنت (روشن کردن موتور جت) 🛫\n"
             "• `.duel` ➡️ (روی پیام طرف ریپلای کن) شروع مبارزه و دوئل متحرک لایو مچ‌اندازی ⚔️\n"
@@ -93,6 +94,48 @@ async def admin_commands(client, message):
             "• بفرست `دوز` یا `dooz` تو پی‌وی هر کی؛ ربات ردیف میشه واسه بازی!"
         )
         await message.reply_text(help_text)
+        return
+
+    # 🔹 قابلیت جدید و اختصاصی: تبدیل متن به ویس با دستور .voice یا .tts
+    if text_lower.startswith(".voice") or text_lower.startswith(".tts"):
+        target_text = ""
+        
+        # اگه جلوی دستور متن نوشته بودی
+        if " " in text:
+            target_text = text.split(" ", 1)[1].strip()
+        # اگه روی پیامی ریپلای کرده بودی
+        elif message.reply_to_message and message.reply_to_message.text:
+            target_text = message.reply_to_message.text.strip()
+            
+        if not target_text:
+            await message.edit_text("❌ مشتی یا جلوی دستور متن بنویس یا روی یه پیام متنی ریپلای کن!")
+            return
+            
+        await message.delete()
+        status_msg = await client.send_message(chat_id, "🎙 در حال ردیف کردن ویس صوتی...")
+        
+        # تشخیص خودکار زبان متن (اگه انگلیسی بود انگلیسی بخونه، وگرنه فارسی)
+        v_lang = 'fa'
+        first_char = target_text.lower()[0] if target_text else ""
+        if 'a' <= first_char <= 'z':
+            v_lang = 'en'
+            
+        try:
+            await client.send_chat_action(chat_id, ChatAction.RECORD_AUDIO)
+            voice_file = f"manual_{int(time.time())}.mp3"
+            
+            if os.path.exists(voice_file): os.remove(voice_file)
+            
+            tts = gTTS(text=target_text, lang=v_lang, slow=False)
+            tts.save(voice_file)
+            
+            # ارسال ویس به عنوان ریپلای (اگه ریپلای بوده) یا ارسال عادی
+            reply_to_id = message.reply_to_message.id if message.reply_to_message else None
+            await client.send_voice(chat_id, voice=voice_file, reply_to_message_id=reply_to_id)
+            await status_msg.delete()
+            os.remove(voice_file)
+        except Exception as e:
+            await status_msg.edit_text(f"❌ ویس ردیف نشد سالار. خطا: {e}")
         return
 
     # 🔹 قابلیت جدید: دانلودر و لیچر مافوق صوت با aiohttp (.dl)
@@ -410,7 +453,7 @@ async def admin_commands(client, message):
         status_msg = await message.edit_text("📊 در حال چرتکه‌اندازی کل تاریخچه پیام‌های این چت... (کمی صبور باش)")
         try:
             m_count, p_count, v_count, s_count = 0, 0, 0, 0
-            async for msg in client.get_chat_history(chat_id): # برداشتن لیمیت چت واسه جارو کردن کل گپ
+            async for msg in client.get_chat_history(chat_id): 
                 m_count += 1
                 if msg.photo: p_count += 1
                 elif msg.voice or msg.audio: v_count += 1
@@ -606,7 +649,6 @@ async def catch_view_once(client, message):
         return
 
     current_status = settings["status"]
-    lang_code = 'fa' # زبان پیش‌فرض ویس گوگل
 
     # ۱. بخش مود شب (ساعت ۱۲ شب تا ۸ صبح)
     if settings["night_mode"] and (0 <= current_hour < 8):
@@ -623,25 +665,11 @@ async def catch_view_once(client, message):
                 "نوتیف چتت رو سایلنت کردم که بیدار نشه. فردا که بلند شد اولین کاری که می‌کنه اینه که میاد پی‌ویت. شب خوش! 🌙"
             )
         await message.reply_text(reply_text)
-        
-        # 🎤 ارسال ویس منشی در پی‌وی برای مود شب
-        if not is_group:
-            try:
-                await client.send_chat_action(chat_id, ChatAction.RECORD_AUDIO)
-                voice_file = f"voice_{chat_id}.mp3"
-                if os.path.exists(voice_file): os.remove(voice_file)
-                tts = gTTS(text=reply_text, lang='fa', slow=False)
-                tts.save(voice_file)
-                await client.send_voice(chat_id, voice=voice_file, caption="🎙 منشی صوتی آریا (مود شب)")
-                os.remove(voice_file)
-            except: pass
-            
         last_replied[chat_id] = now
         return
 
     # ۲. بخش انگلیسی (طول روز)
     if 'a' <= (text_lower[0] if text_lower else "") <= 'z':
-        lang_code = 'en' # تغییر زبان ویس گوگل به انگلیسی
         if is_group:
             reply_text = (
                 f"Yo everyone! 👋\n"
@@ -659,7 +687,7 @@ async def catch_view_once(client, message):
     else:
         if is_group:
             reply_text = (
-                f"سلام رفقا! چه خبر؟ 😍👋\n"
+                f"سلام رفقا! چه خبر?” 😍👋\n"
                 f"من دستیار آریام؛ آریا الان تل نیست و تو وضعیت [ **{current_status}** ] قرار داره.\n"
                 f"تگتون رو براش نگه می‌دارم، اومد آنلاین شد سریع میاد گروه رو چک می‌کنه. مخلص همگی! 🤝🔥"
             )
@@ -673,24 +701,6 @@ async def catch_view_once(client, message):
     await client.send_chat_action(chat_id, ChatAction.TYPING)
     await asyncio.sleep(3)
     await message.reply_text(reply_text)
-    
-    # 🎤 قابلیت اصلی: منشی صوتی با gTTS (مخصوص چت خصوصی)
-    if not is_group:
-        try:
-            await client.send_chat_action(chat_id, ChatAction.RECORD_AUDIO)
-            voice_file = f"voice_{chat_id}.mp3"
-            if os.path.exists(voice_file): os.remove(voice_file)
-            
-            # تبدیل متن ریپلای شده به فایل صوتی
-            tts = gTTS(text=reply_text, lang=lang_code, slow=False)
-            tts.save(voice_file)
-            
-            # ارسال ویس تلگرامی
-            await client.send_voice(chat_id, voice=voice_file, caption="🎙 منشی صوتی آریا")
-            os.remove(voice_file)
-        except Exception as e:
-            print(f"خطا در ردیف کردن ویس هوشمند: {e}")
-
     last_replied[chat_id] = now
 
 def render_board(board):
