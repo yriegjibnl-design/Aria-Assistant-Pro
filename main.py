@@ -5,6 +5,7 @@ import psutil
 import requests
 import asyncio
 import aiohttp
+import re
 from datetime import datetime
 from pyrogram import Client, filters
 from pyrogram.enums import ChatAction
@@ -34,7 +35,7 @@ settings = {
 # تابع کمکی جدید برای دانلود ناهمگام و پرسرعت فایل از اینترنت
 async def download_file(url, destination):
     async with aiohttp.ClientSession() as session:
-        async with session.get(url) as response:
+        async with session.get(url, timeout=1800) as response:
             if response.status == 200:
                 with open(destination, 'wb') as f:
                     while True:
@@ -44,6 +45,33 @@ async def download_file(url, destination):
                         f.write(chunk)
                 return True
     return False
+
+# موتور هوشمند استخراج لینک دانلود مستقیم از گوگل‌پلی و مایکت
+async def fetch_store_apk(url):
+    try:
+        # استخراج از مایکت ایران
+        if "myket.ir" in url:
+            package_match = re.search(r"apps/([^/?]+)", url)
+            if package_match:
+                pkg_id = package_match.group(1)
+                direct_download = f"https://get.myket.ir/v3/applications/{pkg_id}/download"
+                return direct_download, f"{pkg_id}.apk"
+        
+        # استخراج از گوگل‌پلی با واسطه افزونه evozi
+        elif "play.google.com" in url:
+            package_match = re.search(r"id=([^&?]+)", url)
+            if package_match:
+                pkg_id = package_match.group(1)
+                api_url = f"https://api.apps.evozi.com/apk/v1/dl?id={pkg_id}"
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(api_url) as res:
+                        if res.status == 200:
+                            data = await res.json()
+                            if data.get("status") == "success":
+                                return data.get("url"), f"{pkg_id}.apk"
+    except:
+        pass
+    return None, None
 
 # تابع فوق‌العاده پیشرفته و طبیعی تبدیل متن به ویس مردونه بدون نیاز به ابزارهای لینوکس
 async def text_to_voice_male(text, output_file):
@@ -80,7 +108,7 @@ async def admin_commands(client, message):
                 "• `profile [آیدی]` ➡️ دانلود رگباری تمام عکس‌های پروفایل طرف\n\n"
                 "🛠 **ابزارهای زنده, دست‌فرمان‌ها و قابلیت‌های خاص:**\n"
                 "• `.voice` یا `.tts` ➡️ تبدیل متن به ویس صوتی مردونه بدون تحریم 🎙\n"
-                "• `.dl [لینک]` ➡️ لیچ و دانلود فایل با سرعت نور از وب ⚡️\n"
+                "• `.dl [لینک]` ➡️ لیچ فیلم (پخش لایو)، لینک‌های عادی و گوگل‌پلی/مایکت ⚡️\n"
                 "• `.fly [متن]` ➡️ پرواز تماشایی هواپیما روی متنت 🛫\n"
                 "• `.duel` ➡️ شروع مبارزه و دوئل متحرک لایو مچ‌اندازی ⚔️\n"
                 "• `bomb [تعداد] [متن]` ➡️ به توپ بستن و ارسال رگباری پیام\n"
@@ -88,7 +116,7 @@ async def admin_commands(client, message):
                 "• `del [تعداد]` ➡️ غیب کردن پیام‌های خودت به صورت دوطرفه\n"
                 "• `info` ➡️ تار و پود و آمار کارآگاهی طرف\n"
                 "• `age` ➡️ حساب کتابِ اینکه طرف چند ساله تو تلگرامه\n"
-                "• `stats` ➡️ آمارگیر کل تاریخچه چت جاری بدون هیچ محدودیتی 📊\n"
+                "• `stats` ➡️ آمارگیر کل تاریخچه چت جاری بدون هیچ محدوبیتی 📊\n"
                 "• `clock` ➡️ ساعت دیجیتال زنده و ثانیه‌شمار تو چت\n"
                 "• `stopclock` ➡️ متوقف کردن ساعت لایو\n"
                 "• `.marquee [متن]` ➡️ راه انداختن تابلوروان متحرک دور متنت\n"
@@ -133,19 +161,42 @@ async def admin_commands(client, message):
                 await status_msg.edit_text(f"❌ ویس ردیف نشد سالار. خطا: {e}")
             return
 
-        # 🔹 قابلیت دانلودر و لیچر مافوق صوت (.dl)
+        # 🔹 قابلیت دانلودر ارتقا یافته (فیلم فابریک + استورهای اندرویدی)
         if text.startswith(".dl "):
             url = text.split(".dl ", 1)[1].strip()
-            status_msg = await message.edit_text("📥 در حال خفت کردن فایل از اینترنت با سرعت فضا...")
-            filename = url.split("/")[-1].split("?")[0]
-            if not filename:
-                filename = f"file_{int(time.time())}.dat"
+            status_msg = await message.edit_text("📥 در حال آنالیز لینک و خفت کردن دیتا...")
+            
+            # چِک کردن لینک برای گوگل‌پلی و مایکت
+            store_url, custom_filename = await fetch_store_apk(url)
+            if store_url:
+                url = store_url
+                filename = custom_filename
+                is_app = True
+            else:
+                filename = url.split("/")[-1].split("?")[0]
+                if not filename:
+                    filename = f"file_{int(time.time())}.mp4"
+                is_app = filename.lower().endswith(".apk")
                 
             try:
+                await status_msg.edit_text("⚡️ لینک فیکس شد! در حال دانلود روی سرور ریل‌وی...")
                 success = await download_file(url, filename)
+                
                 if success and os.path.exists(filename):
-                    await status_msg.edit_text("📤 دانلود روی سرور ردیف شد! در حال آپلود توی چت...")
-                    await client.send_document(chat_id, document=filename, caption=f"⚡️ فایلت ردیف شد سالار:\n📦 `{filename}`")
+                    await status_msg.edit_text("📤 دانلود تمام! در حال آپلود خوش‌دست توی چت...")
+                    
+                    # فرمت‌های رایج ویدیویی
+                    video_extensions = (".mp4", ".mkv", ".mov", ".avi")
+                    
+                    if filename.lower().endswith(video_extensions) and not is_app:
+                        # ارسال به صورت ویدیو پلیر
+                        await client.send_chat_action(chat_id, ChatAction.UPLOAD_VIDEO)
+                        await client.send_video(chat_id, video=filename, caption=f"🎬 ویدیوی درخواستی ردیف شد سالار:")
+                    else:
+                        # ارسال به صورت فایل معمولی (مثل APK)
+                        await client.send_chat_action(chat_id, ChatAction.UPLOAD_DOCUMENT)
+                        await client.send_document(chat_id, document=filename, caption=f"⚡️ فایلت ردیف شد سالار:\n📦 `{filename}`")
+                    
                     await status_msg.delete()
                     os.remove(filename)
                 else:
